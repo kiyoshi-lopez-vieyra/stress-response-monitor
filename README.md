@@ -62,7 +62,14 @@ Notes on the data: the first lines of each file start with `#` (subject ID, task
 
 ## Findings so far
 
-In pilot sessions, heart rate rose and peripheral temperature fell during the stress task, as expected. During recovery, however, heart rate returned to baseline first and temperature much later, so a single whole-session Pearson coefficient understates the relationship. This points to a **time-lagged** response rather than an instantaneous one. A quantitative analysis (per-phase statistics, lagged cross-correlation, recovery times) is planned in `analysis/`.
+Exploratory analysis of 6 sessions (one participant each; five Stroop, one PASAT) in [`analysis/stress_analysis.ipynb`](analysis/stress_analysis.ipynb):
+
+- **Heart rate responded to the task in most sessions:** a peak 10-s rise of +10 to +30 BPM at stress onset in 5 of 6 sessions (the PASAT session was the exception). Phase means understate this because heart rate often peaks early and then falls back while the task continues.
+- **Recovery was inconsistent:** heart rate returned to rest level or below in 4 of 6 sessions and stayed above it in the other 2.
+- **Temperature did not follow the phases:** in 5 of 6 sessions its trend kept the same sign through rest, stress and recovery, which looks like sensor/room drift. It cannot be interpreted without a no-task control session.
+- **The whole-session Pearson coefficient is not a reliable summary** (negative in only 3 of 6 sessions). A lagged analysis after detrending is suggestive (heart rate tended to be followed by lower temperature, with highly variable lags) but weak.
+
+With n = 6, mixed tasks and no control session, these results are exploratory and not evidence about stress physiology in general.
 
 ## Known limitations and next steps
 
@@ -70,7 +77,7 @@ In pilot sessions, heart rate rose and peripheral temperature fell during the st
 - PPG is sensitive to motion, finger pressure and ambient light; peripheral temperature needs minutes to equilibrate.
 - Small, homogeneous sample; results are exploratory.
 - The original technical documentation says the app needs no internet; in practice Chart.js is fetched from a CDN.
-- Planned: lagged cross-correlation notebook, SQLite storage of sessions, HRV metrics (RMSSD, pNN50), SpO₂.
+- Planned: more sessions with default durations plus no-task control sessions, insulated temperature sensor, SQLite storage of sessions, HRV metrics (RMSSD, pNN50), SpO₂.
 
 ## Run it
 
@@ -78,6 +85,10 @@ In pilot sessions, heart rate rose and peripheral temperature fell during the st
 2. In `firmware/stress_monitor/stress_monitor.ino`, set your own WiFi name and password. Do not commit them.
 3. Flash the ESP32 and read its IP from the Serial Monitor (115200 baud).
 4. Open `webapp/index.html` directly from your computer or phone (not from an HTTPS page; browsers block insecure `ws://` connections from HTTPS sites, so GitHub Pages will not work) and enter the ESP32 IP.
+
+## Data and analysis
+
+`data/` holds anonymized session CSVs (S01–S06; see `data/README.md` for details). `analysis/stress_analysis.ipynb` loads every CSV in `data/`, harmonizes the app versions and produces the figures in `analysis/figures/` and `analysis/session_summary.csv`. To run it: `pip install -r analysis/requirements.txt`, then open the notebook with Jupyter.
 
 ## Ethics and privacy
 
