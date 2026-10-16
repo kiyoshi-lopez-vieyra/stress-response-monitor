@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Monitor de Estrés</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f2f2f7;
+      color: #1c1c1e;
+      min-height: 100vh;
+    }
+
+    .screen { display: none; min-height: 100vh; }
+    .screen.active { display: flex; flex-direction: column; }
+
+    .container-narrow {
+      max-width: 480px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 1.5rem 1rem;
+    }
+
+    /* ── HEADER ── */
+    .logo { text-align: center; margin-bottom: 1.5rem; }
+    .logo h1 { font-size: 24px; font-weight: 600; }
+    .logo p { font-size: 13px; color: #8e8e93; margin-top: 4px; }
+
+    /* ── FORMS ── */
+    .field-label { font-size: 12px; color: #8e8e93; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+    .field { margin-bottom: 1.2rem; }
+
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 16px;
+      border-radius: 12px;
+      border: 1px solid #d1d1d6;
+      background: #fff;
+      color: #1c1c1e;
+      outline: none;
+      -webkit-appearance: none;
+      font-family: inherit;
+    }
+
+    input:focus, select:focus { border-color: #007aff; }
+
+    .phases-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .phase-input { text-align: center; }
+    .phase-input span { display: block; font-size: 11px; color: #8e8e93; margin-top: 4px; }
+    .phase-input input { text-align: center; }
+
+    /* ── BUTTONS ── */
+    .btn-primary {
+      width: 100%;
+      padding: 14px;
+      font-size: 17px;
+      font-weight: 600;
+      border-radius: 14px;
+      border: none;
+      background: #007aff;
+      color: #fff;
+      cursor: pointer;
+      margin-top: 0.5rem;
+    }
+
+    .btn-primary:active { background: #0062cc; transform: scale(0.98); }
+    .btn-primary:disabled { background: #b0b0b8; cursor: not-allowed; }
+
+    .btn-secondary {
+      padding: 10px 20px;
+      font-size: 15px;
+      font-weight: 500;
+      border-radius: 12px;
+      border: 1px solid #d1d1d6;
+      background: #fff;
+      color: #1c1c1e;
+      cursor: pointer;
+    }
+
+    .btn-danger {
+      padding: 10px 20px;
+      font-size: 15px;
+      font-weight: 500;
+      border-radius: 12px;
+      border: none;
+      background: #ff3b30;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    /* ── ESTADO CONEXION ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e5e5ea;
+      margin-top: 8px;
+    }
+
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #8e8e93; flex-shrink: 0; }
+    .dot.connected { background: #34c759; }
+    .dot.connecting { background: #ff9500; animation: pulse 1s infinite; }
+    .dot.error { background: #ff3b30; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .status-text { font-size: 13px; color: #8e8e93; }
+
+    /* ── SELECTOR DE PRUEBA ── */
+    .test-selector { display: grid; gap: 10px; }
+    .test-option {
+      background: #fff;
+      border: 2px solid #e5e5ea;
+      border-radius: 14px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .test-option.selected { border-color: #007aff; background: #e7f1ff; }
+    .test-option h4 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+    .test-option p { font-size: 13px; color: #8e8e93; line-height: 1.4; }
+
+    /* ── ESTABILIZACION ── */
+    #screen-stabilize { justify-content: center; align-items: center; padding: 2rem; }
+    .stab-content { width: 100%; max-width: 360px; text-align: center; }
+    .stab-title { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+    .stab-instruction { font-size: 14px; color: #8e8e93; margin-bottom: 2.5rem; line-height: 1.5; }
+
+    .stab-card {
+      background: #fff;
+      border-radius: 18px;
+      padding: 1.2rem;
+      border: 2px solid #e5e5ea;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: all 0.3s;
+    }
+
+    .stab-card.stable { border-color: #34c759; background: #e8f7ec; animation: bounce 0.5s; }
+
+    @keyframes bounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+
+    .stab-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #f2f2f7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      flex-shrink: 0;
+      transition: all 0.3s;
+    }
+
+    .stab-card.stable .stab-icon { background: #34c759; color: #fff; }
+
+    .stab-info { flex: 1; text-align: left; }
+    .stab-info .stab-label { font-size: 12px; color: #8e8e93; text-transform: uppercase; }
+    .stab-info .stab-value { font-size: 22px; font-weight: 600; line-height: 1.2; margin-top: 2px; }
+    .stab-info .stab-status { font-size: 12px; color: #8e8e93; margin-top: 2px; }
+    .stab-card.stable .stab-status { color: #34c759; font-weight: 600; }
+
+    .stab-progress {
+      height: 4px;
+      background: #e5e5ea;
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .stab-progress-fill {
+      height: 100%;
+      background: #ff9500;
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+    .stab-card.stable .stab-progress-fill { background: #34c759; }
+
+    .stab-bigcheck {
+      font-size: 64px;
+      color: #34c759;
+      margin: 1rem 0;
+      opacity: 0;
+      transform: scale(0);
+      transition: all 0.4s;
+    }
+    .stab-bigcheck.show { opacity: 1; transform: scale(1); }
+
+    /* ── SESION ── */
+    #screen-session { padding: 1rem; max-width: 480px; margin: 0 auto; width: 100%; }
+
+    .session-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .session-header h2 { font-size: 18px; font-weight: 600; }
+
+    .phase-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .phase-badge.reposo { background: #e8f5e9; color: #2e7d32; }
+    .phase-badge.estres { background: #fff3e0; color: #e65100; }
+    .phase-badge.recuperacion { background: #e3f2fd; color: #1565c0; }
+    .phase-badge.listo { background: #f3e5f5; color: #6a1b9a; }
+
+    .timer-bar {
+      height: 6px;
+      background: #e5e5ea;
+      border-radius: 3px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+
+    .timer-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: #007aff;
+      transition: width 1s linear;
+    }
+
+    .vitals-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 1rem;
+    }
+
+    .vital-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 1rem;
+      border: 1px solid #e5e5ea;
+      text-align: center;
+    }
+
+    .vital-label { font-size: 11px; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .vital-value { font-size: 34px; font-weight: 600; line-height: 1; }
+    .vital-unit { font-size: 12px; color: #8e8e93; margin-top: 4px; }
+    .vital-bpm .vital-value { color: #ff3b30; }
+    .vital-temp .vital-value { color: #007aff; }
+
+    .chart-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 0.9rem 1rem;
+      border: 1px solid #e5e5ea;
+      margin-bottom: 0.8rem;
+    }
+
+    .chart-label { font-size: 12px; color: #8e8e93; margin-bottom: 6px; }
+
+    .finger-warn {
+      background: #fff3cd;
+      color: #856404;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      margin-bottom: 0.8rem;
+      text-align: center;
+      display: none;
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 0.5rem;
+    }
+
+    .session-actions button { flex: 1; }
+
+    /* ══ STROOP / N-BACK / PASAT OVERLAY ══ */
+    .test-overlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 2rem 1.5rem;
+    }
+
+    .test-overlay.active { display: flex; }
+
+    .test-instruction {
+      font-size: 14px;
+      color: #8e8e93;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      max-width: 340px;
+    }
+
+    .test-timer { font-size: 13px; color: #8e8e93; margin-bottom: 1rem; }
+
+    .test-progress {
+      width: 100%;
+      max-width: 340px;
+      height: 4px;
+      background: #333;
+      border-radius: 2px;
+      margin-bottom: 2.5rem;
+      overflow: hidden;
+    }
+
+    .test-progress-fill {
+      height: 100%;
+      background: #ff9500;
+      border-radius: 2px;
+      transition: width 0.5s linear;
+    }
+
+    #stroop-word, #nback-letter {
+      font-size: 64px;
+      font-weight: 700;
+      margin-bottom: 2.5rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    #pasat-question {
+      font-size: 38px;
+      font-weight: 700;
+      margin-bottom: 2rem;
+      color: #fff;
+    }
+
+    .test-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      width: 100%;
+      max-width: 340px;
+    }
+
+    .test-buttons.cols-1 { grid-template-columns: 1fr; gap: 12px; }
+
+    .test-btn {
+      padding: 18px 10px;
+      border-radius: 14px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .test-btn:active { transform: scale(0.95); }
+
+    .nback-btn { background: #007aff; font-size: 18px; }
+    .pasat-btn { background: #5856d6; font-size: 22px; }
+
+    .test-feedback {
+      font-size: 26px;
+      font-weight: 700;
+      margin-top: 1.2rem;
+      height: 32px;
+    }
+
+    .test-score {
+      font-size: 13px;
+      color: #8e8e93;
+      margin-top: 0.8rem;
+    }
+
+    /* ── FLASH FEEDBACK ── */
+    .flash-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 200;
+      opacity: 0;
+      transition: opacity 0.12s;
+    }
+    .flash-overlay.flash-correct { background: rgba(52, 199, 89, 0.45); }
+    .flash-overlay.flash-wrong { background: rgba(255, 59, 48, 0.55); }
+    .flash-overlay.active { opacity: 1; }
+
+    /* ── BIG TIMER ── */
+    .big-timer {
+      font-size: 36px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 0.8rem;
+      letter-spacing: 2px;
+      color: #fff;
+    }
+    .big-timer.warning { color: #ff9500; }
+    .big-timer.danger { color: #ff3b30; animation: shake 0.4s infinite; }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+
+    /* ── PRESION SCORE BAR ── */
+    .pressure-bar {
+      width: 100%;
+      max-width: 340px;
+      margin-bottom: 1rem;
+    }
+    .pressure-bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #8e8e93;
+      margin-bottom: 4px;
+    }
+    .pressure-bar-track {
+      height: 8px;
+      background: #2c2c2e;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .pressure-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #34c759 0%, #34c759 60%, #ff9500 80%, #ff3b30 100%);
+      border-radius: 4px;
+      transition: width 0.3s;
+      width: 0%;
+    }
+    .pressure-bar-marker {
+      position: absolute;
+      top: -3px;
+      bottom: -3px;
+      width: 2px;
+      background: #fff;
+      left: 70%;
+    }
+
+    /* ── MOTIVATIONAL MESSAGES ── */
+    .motivational {
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translateX(-50%) scale(0);
+      background: rgba(255, 59, 48, 0.95);
+      color: #fff;
+      padding: 1rem 2rem;
+      border-radius: 14px;
+      font-size: 24px;
+      font-weight: 700;
+      z-index: 250;
+      pointer-events: none;
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      text-align: center;
+      max-width: 80vw;
+    }
+    .motivational.show {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+
+    /* ── COUNTDOWN ── */
+    .countdown-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.95);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+      flex-direction: column;
+    }
+    .countdown-overlay.active { display: flex; }
+    .countdown-number {
+      font-size: 200px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+      animation: countdownPop 1s ease-out;
+    }
+    .countdown-label {
+      font-size: 16px;
+      color: #8e8e93;
+      margin-top: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+    }
+
+    @keyframes countdownPop {
+      0% { transform: scale(0.3); opacity: 0; }
+      50% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── STREAK ── */
+    .streak-display {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      font-size: 14px;
+      color: #ff9500;
+      font-weight: 600;
+    }
+
+    /* ══ RESULTADOS ══ */
+    #screen-results {
+      max-width: 480px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 1rem 1rem 3rem;
+    }
+
+    .results-header { text-align: center; margin-bottom: 1.5rem; padding-top: 0.5rem; }
+    .results-header h2 { font-size: 22px; font-weight: 600; }
+    .results-header p { font-size: 13px; color: #8e8e93; margin-top: 4px; }
+
+    .results-section { margin-bottom: 1.5rem; }
+    .results-section h3 { font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; font-weight: 600; }
+
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+    .stat-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 0.8rem 0.6rem;
+      border: 1px solid #e5e5ea;
+      text-align: center;
+    }
+
+    .stat-phase { font-size: 10px; color: #8e8e93; margin-bottom: 4px; text-transform: uppercase; }
+    .stat-val { font-size: 20px; font-weight: 600; }
+    .stat-unit { font-size: 10px; color: #8e8e93; margin-top: 2px; }
+    .stat-bpm { color: #ff3b30; }
+    .stat-temp { color: #007aff; }
+
+    .corr-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 1.2rem;
+      border: 1px solid #e5e5ea;
+    }
+
+    .corr-value { font-size: 48px; font-weight: 600; text-align: center; margin: 0.5rem 0; }
+    .corr-label { font-size: 13px; color: #8e8e93; text-align: center; }
+    .corr-desc { font-size: 13px; color: #1c1c1e; text-align: center; margin-top: 0.5rem; line-height: 1.5; }
+
+    .test-result-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 1rem;
+      border: 1px solid #e5e5ea;
+      display: flex;
+      justify-content: space-around;
+      text-align: center;
+    }
+
+    .sr-item .sr-val { font-size: 28px; font-weight: 600; }
+    .sr-item .sr-label { font-size: 12px; color: #8e8e93; margin-top: 2px; }
+    .sr-correct { color: #34c759; }
+    .sr-wrong { color: #ff3b30; }
+    .sr-pct { color: #007aff; }
+
+    .actions-row { display: flex; gap: 10px; }
+    .actions-row button { flex: 1; }
+
+    @media (prefers-color-scheme: dark) {
+      body { background: #000; color: #f2f2f7; }
+      input[type="text"], input[type="number"], select { background: #1c1c1e; border-color: #3a3a3c; color: #f2f2f7; }
+      .vital-card, .chart-card, .corr-card, .stat-card, .test-result-card, .status-bar, .stab-card, .test-option { background: #1c1c1e; border-color: #3a3a3c; }
+      .btn-secondary { background: #1c1c1e; border-color: #3a3a3c; color: #f2f2f7; }
+      .timer-bar { background: #3a3a3c; }
+      .finger-warn { background: #3a2f00; color: #ffd60a; }
+      .stab-icon { background: #2c2c2e; }
+      .stab-card.stable { background: #1c3a25; }
+      .test-option.selected { background: #1c2e44; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ PANTALLA 1: CONFIGURACION ══ -->
+<div id="screen-config" class="screen active">
+  <div class="container-narrow">
+    <div class="logo">
+      <h1>Monitor de Estrés</h1>
+      <p>BPM · Temperatura · Pruebas cognitivas</p>
+    </div>
+
+    <div class="field">
+      <div class="field-label">ID del paciente</div>
+      <input type="text" id="patientId" placeholder="ej: Paciente-01" />
+    </div>
+
+    <div class="field">
+      <div class="field-label">IP del ESP32</div>
+       <div style="display:flex;gap:8px;">
+        <input type="text" id="espIp" placeholder="ej: 192.168.1.50" style="flex:1;" />
+        <button class="btn-secondary" id="btnConnect" style="white-space:nowrap;padding:10px 16px;">Conectar</button>
+      </div>
+      <div class="status-bar">
+        <div class="dot" id="configDot"></div>
+        <span class="status-text" id="configStatus">Sin conectar</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label">Selecciona la prueba cognitiva</div>
+      <div class="test-selector" id="testSelector">
+        <div class="test-option selected" data-test="stroop">
+          <h4>Stroop Test</h4>
+          <p>Palabras de colores con conflicto cognitivo. La más usada en estudios de estrés.</p>
+        </div>
+        <div class="test-option" data-test="nback">
+          <h4>N-Back (1-back)</h4>
+          <p>Aparecen letras una por una. Indica si la actual es igual a la anterior. Estresa la memoria de trabajo.</p>
+        </div>
+        <div class="test-option" data-test="pasat">
+          <h4>Aritmética mental (PASAT)</h4>
+          <p>Sumas y restas con tiempo limitado. Uno de los mayores estresores cognitivos en investigación.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label">Duración de cada fase (segundos)</div>
+      <div class="phases-grid">
+        <div class="phase-input">
+          <input type="number" id="dur-reposo" value="120" min="30" max="600" />
+          <span>Reposo</span>
+        </div>
+        <div class="phase-input">
+          <input type="number" id="dur-estres" value="180" min="30" max="600" />
+          <span>Prueba</span>
+        </div>
+        <div class="phase-input">
+          <input type="number" id="dur-recuperacion" value="120" min="30" max="600" />
+          <span>Recuperación</span>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="btnStart" disabled>Continuar</button>
+  </div>
+</div>
+
+<!-- ══ PANTALLA 2: ESTABILIZACION ══ -->
+<div id="screen-stabilize" class="screen">
+  <div class="stab-content">
+    <div class="stab-title">Colocación del sensor</div>
+    <div class="stab-instruction">Coloca el dedo índice en el MAX30102 y el sensor de temperatura. Mantén la posición hasta que ambas señales se estabilicen.</div>
+
+    <div class="stab-card" id="stabCardBpm">
+      <div class="stab-icon" id="stabIconBpm">❤️</div>
+      <div class="stab-info">
+        <div class="stab-label">Frec. cardiaca</div>
+        <div class="stab-value" id="stabBpmVal">--</div>
+        <div class="stab-status" id="stabBpmStatus">Esperando...</div>
+        <div class="stab-progress"><div class="stab-progress-fill" id="stabBpmProgress" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="stab-card" id="stabCardTemp">
+      <div class="stab-icon" id="stabIconTemp">🌡️</div>
+      <div class="stab-info">
+        <div class="stab-label">Temperatura</div>
+        <div class="stab-value" id="stabTempVal">--</div>
+        <div class="stab-status" id="stabTempStatus">Esperando...</div>
+        <div class="stab-progress"><div class="stab-progress-fill" id="stabTempProgress" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="stab-bigcheck" id="stabBigCheck">✓</div>
+
+    <button class="btn-primary" id="btnStartSession" disabled style="margin-top:1rem;">Esperando estabilización...</button>
+    <button class="btn-secondary" id="btnBackConfig" style="margin-top:8px;width:100%;border:none;background:transparent;color:#8e8e93;">Volver</button>
+  </div>
+</div>
+
+<!-- ══ PANTALLA 3: SESION ══ -->
+<div id="screen-session" class="screen">
+  <div class="session-header">
+    <h2 id="sessionPatient">Paciente</h2>
+    <span class="phase-badge listo" id="phaseBadge">Listo</span>
+  </div>
+
+  <div class="timer-bar"><div class="timer-fill" id="timerFill" style="width:0%"></div></div>
+
+  <div class="finger-warn" id="fingerWarn">Coloca el dedo en el sensor</div>
+
+  <div class="vitals-cards">
+    <div class="vital-card vital-bpm">
+      <div class="vital-label">Frec. cardiaca</div>
+      <div class="vital-value" id="bpmVal">--</div>
+      <div class="vital-unit">BPM</div>
+    </div>
+    <div class="vital-card vital-temp">
+      <div class="vital-label">Temperatura</div>
+      <div class="vital-value" id="tempVal">--</div>
+      <div class="vital-unit">°C</div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-label">BPM en tiempo real</div>
+    <div style="position:relative;height:110px;">
+      <canvas id="liveBpmChart" role="img" aria-label="BPM en tiempo real">Gráfica BPM tiempo real.</canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-label">Temperatura en tiempo real</div>
+    <div style="position:relative;height:110px;">
+      <canvas id="liveTempChart" role="img" aria-label="Temperatura en tiempo real">Gráfica Temperatura tiempo real.</canvas>
+    </div>
+  </div>
+
+  <div class="session-actions">
+    <button class="btn-primary" id="btnNextPhase">▶ Iniciar reposo</button>
+    <button class="btn-danger" id="btnEndSession" style="flex:0;padding:10px 16px;font-size:14px;">Terminar</button>
+  </div>
+
+  <div style="font-size:12px;color:#8e8e93;text-align:center;" id="recordCount">0 registros grabados</div>
+</div>
+
+<!-- ══ ELEMENTOS GLOBALES DE FEEDBACK ══ -->
+<div class="flash-overlay" id="flashOverlay"></div>
+<div class="motivational" id="motivationalMsg"></div>
+<div class="countdown-overlay" id="countdownOverlay">
+  <div class="countdown-number" id="countdownNumber">3</div>
+  <div class="countdown-label" id="countdownLabel">Prepárate</div>
+</div>
+
+<!-- ══ OVERLAY STROOP ══ -->
+<div id="stroop-overlay" class="test-overlay">
+  <div class="streak-display" id="stroopStreak"></div>
+  <div class="test-instruction">Toca el COLOR en que está escrita la palabra</div>
+  <div class="big-timer" id="stroopBigTimer">3:00</div>
+  <div class="test-progress"><div class="test-progress-fill" id="stroopProgressFill" style="width:100%"></div></div>
+  <div class="pressure-bar">
+    <div class="pressure-bar-label">
+      <span>Precisión</span>
+      <span id="stroopPressureLabel">0% / 70% requerido</span>
+    </div>
+    <div class="pressure-bar-track">
+      <div class="pressure-bar-fill" id="stroopPressureFill"></div>
+      <div class="pressure-bar-marker"></div>
+    </div>
+  </div>
+  <div id="stroop-word">ROJO</div>
+  <div class="test-buttons" id="stroopButtons"></div>
+  <div class="test-feedback" id="stroopFeedback"></div>
+  <div class="test-score" id="stroopScore">Aciertos: 0 | Errores: 0</div>
+</div>
+
+<!-- ══ OVERLAY N-BACK ══ -->
+<div id="nback-overlay" class="test-overlay">
+  <div class="streak-display" id="nbackStreak"></div>
+  <div class="test-instruction">¿La letra actual es igual a la <strong>anterior</strong>?</div>
+  <div class="big-timer" id="nbackBigTimer">3:00</div>
+  <div class="test-progress"><div class="test-progress-fill" id="nbackProgressFill" style="width:100%"></div></div>
+  <div class="pressure-bar">
+    <div class="pressure-bar-label">
+      <span>Precisión</span>
+      <span id="nbackPressureLabel">0% / 70% requerido</span>
+    </div>
+    <div class="pressure-bar-track">
+      <div class="pressure-bar-fill" id="nbackPressureFill"></div>
+      <div class="pressure-bar-marker"></div>
+    </div>
+  </div>
+  <div id="nback-letter">A</div>
+  <div class="test-buttons" id="nbackButtons">
+    <button class="test-btn nback-btn" data-ans="no" style="background:#ff3b30;">NO</button>
+    <button class="test-btn nback-btn" data-ans="yes" style="background:#34c759;">SÍ</button>
+  </div>
+  <div class="test-feedback" id="nbackFeedback"></div>
+  <div class="test-score" id="nbackScore">Aciertos: 0 | Errores: 0</div>
+</div>
+
+<!-- ══ OVERLAY PASAT ══ -->
+<div id="pasat-overlay" class="test-overlay">
+  <div class="streak-display" id="pasatStreak"></div>
+  <div class="test-instruction">Resuelve la operación lo más rápido posible</div>
+  <div class="big-timer" id="pasatBigTimer">3:00</div>
+  <div class="test-progress"><div class="test-progress-fill" id="pasatProgressFill" style="width:100%"></div></div>
+  <div class="pressure-bar">
+    <div class="pressure-bar-label">
+      <span>Precisión</span>
+      <span id="pasatPressureLabel">0% / 70% requerido</span>
+    </div>
+    <div class="pressure-bar-track">
+      <div class="pressure-bar-fill" id="pasatPressureFill"></div>
+      <div class="pressure-bar-marker"></div>
+    </div>
+  </div>
+  <div id="pasat-question">47 + 28</div>
+  <div class="test-buttons" id="pasatButtons"></div>
+  <div class="test-feedback" id="pasatFeedback"></div>
+  <div class="test-score" id="pasatScore">Aciertos: 0 | Errores: 0</div>
+</div>
+
+<!-- ══ PANTALLA 4: RESULTADOS ══ -->
+<div id="screen-results" class="screen">
+  <div class="results-header">
+    <h2>Resultados</h2>
+    <p id="resultsPatient"></p>
+  </div>
+
+  <div class="results-section">
+    <h3>Frecuencia cardiaca promedio</h3>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-phase">Reposo</div><div class="stat-val stat-bpm" id="bpmReposo">--</div><div class="stat-unit">BPM</div></div>
+      <div class="stat-card"><div class="stat-phase">Estrés</div><div class="stat-val stat-bpm" id="bpmEstres">--</div><div class="stat-unit">BPM</div></div>
+      <div class="stat-card"><div class="stat-phase">Recup.</div><div class="stat-val stat-bpm" id="bpmRecup">--</div><div class="stat-unit">BPM</div></div>
+    </div>
+  </div>
+
+  <div class="results-section">
+    <h3>Temperatura promedio</h3>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-phase">Reposo</div><div class="stat-val stat-temp" id="tempReposo">--</div><div class="stat-unit">°C</div></div>
+      <div class="stat-card"><div class="stat-phase">Estrés</div><div class="stat-val stat-temp" id="tempEstres">--</div><div class="stat-unit">°C</div></div>
+      <div class="stat-card"><div class="stat-phase">Recup.</div><div class="stat-val stat-temp" id="tempRecup">--</div><div class="stat-unit">°C</div></div>
+    </div>
+  </div>
+
+  <div class="results-section">
+    <h3>Correlación BPM ↔ Temperatura</h3>
+    <div class="corr-card">
+      <div class="corr-value" id="corrValue">--</div>
+      <div class="corr-label">Coeficiente de Pearson (r)</div>
+      <div class="corr-desc" id="corrDesc"></div>
+    </div>
+  </div>
+
+  <div class="results-section">
+    <h3 id="testResultLabel">Resultados de la prueba</h3>
+    <div class="test-result-card">
+      <div class="sr-item"><div class="sr-val sr-correct" id="resCorrect">0</div><div class="sr-label">Aciertos</div></div>
+      <div class="sr-item"><div class="sr-val sr-wrong" id="resWrong">0</div><div class="sr-label">Errores</div></div>
+      <div class="sr-item"><div class="sr-val sr-pct" id="resPct">0%</div><div class="sr-label">Precisión</div></div>
+    </div>
+  </div>
+
+  <div class="results-section">
+    <h3>Gráfica completa de la sesión</h3>
+    <div class="chart-card" style="padding:1rem;">
+      <div style="position:relative;height:220px;">
+        <canvas id="fullChart" role="img" aria-label="Gráfica completa de la sesión">Gráfica completa.</canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions-row">
+    <button class="btn-primary" id="btnExport">Exportar CSV</button>
+    <button class="btn-secondary" id="btnNewSession">Nueva sesión</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//   AUDIO ENGINE (Web Audio API - sin archivos)
+// ══════════════════════════════════════════════════════
+let audioCtx = null;
+
+function initAudio() {
+  if (!audioCtx) {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch(e) { console.warn('Audio not supported'); }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+function playTone(freq, duration, type = 'sine', volume = 0.3) {
+  if (!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch(e) {}
+}
+
+function soundCorrect() {
+  // Ding ascendente suave
+  playTone(800, 0.08, 'sine', 0.25);
+  setTimeout(() => playTone(1200, 0.15, 'sine', 0.25), 60);
+}
+
+function soundWrong() {
+  // Buzz grave grave
+  playTone(180, 0.15, 'sawtooth', 0.4);
+  setTimeout(() => playTone(120, 0.25, 'sawtooth', 0.4), 80);
+}
+
+function soundCountdown() {
+  playTone(600, 0.2, 'sine', 0.4);
+}
+
+function soundStart() {
+  // Fanfare corta
+  playTone(523, 0.1, 'sine', 0.4);
+  setTimeout(() => playTone(659, 0.1, 'sine', 0.4), 100);
+  setTimeout(() => playTone(784, 0.2, 'sine', 0.4), 200);
+}
+
+function soundStable() {
+  // Confirmación
+  playTone(880, 0.1, 'sine', 0.3);
+  setTimeout(() => playTone(1320, 0.2, 'sine', 0.3), 100);
+}
+
+function soundPhaseEnd() {
+  playTone(440, 0.3, 'sine', 0.35);
+}
+
+// ══════════════════════════════════════════════════════
+//   FLASH FEEDBACK
+// ══════════════════════════════════════════════════════
+function flashScreen(type) {
+  const flash = document.getElementById('flashOverlay');
+  flash.className = 'flash-overlay flash-' + type + ' active';
+  setTimeout(() => flash.classList.remove('active'), 150);
+}
+
+// ══════════════════════════════════════════════════════
+//   MENSAJES MOTIVACIONALES
+// ══════════════════════════════════════════════════════
+const MOTIVATIONAL_MESSAGES = {
+  encouragement: [
+    '¡MÁS RÁPIDO!',
+    '¡CONCÉNTRATE!',
+    '¡NO TE EQUIVOQUES!',
+    '¡VAMOS!',
+    '¡SIGUE ASÍ!',
+    '¡NO PIERDAS EL RITMO!'
+  ],
+  warning: [
+    '¡CUIDADO!',
+    '¡ATENCIÓN!',
+    '¡PRECISIÓN BAJA!',
+    '¡MEJORA!'
+  ],
+  praise: [
+    '¡EXCELENTE!',
+    '¡PERFECTO!',
+    '¡INCREÍBLE!',
+    '¡SIGUE ASÍ!'
+  ]
+};
+
+function showMotivational(type) {
+  const msgs = MOTIVATIONAL_MESSAGES[type];
+  const msg = msgs[Math.floor(Math.random() * msgs.length)];
+  const el = document.getElementById('motivationalMsg');
+  el.textContent = msg;
+  if (type === 'praise') el.style.background = 'rgba(52, 199, 89, 0.95)';
+  else if (type === 'warning') el.style.background = 'rgba(255, 149, 0, 0.95)';
+  else el.style.background = 'rgba(255, 59, 48, 0.95)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1200);
+}
+
+// ══════════════════════════════════════════════════════
+//   COUNTDOWN
+// ══════════════════════════════════════════════════════
+function showCountdown(label, callback) {
+  const overlay = document.getElementById('countdownOverlay');
+  const numEl = document.getElementById('countdownNumber');
+  const labelEl = document.getElementById('countdownLabel');
+  labelEl.textContent = label;
+  overlay.classList.add('active');
+
+  let count = 3;
+  numEl.textContent = count;
+  soundCountdown();
+  vibrate(50);
+
+  const interval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      numEl.textContent = count;
+      numEl.style.animation = 'none';
+      void numEl.offsetWidth;
+      numEl.style.animation = 'countdownPop 1s ease-out';
+      soundCountdown();
+      vibrate(50);
+    } else {
+      clearInterval(interval);
+      numEl.textContent = '¡YA!';
+      numEl.style.animation = 'none';
+      void numEl.offsetWidth;
+      numEl.style.animation = 'countdownPop 1s ease-out';
+      soundStart();
+      vibrate([100, 50, 200]);
+      setTimeout(() => {
+        overlay.classList.remove('active');
+        if (callback) callback();
+      }, 700);
+    }
+  }, 1000);
+}
+
+// ══════════════════════════════════════════════════════
+//   CONFIGURACION GLOBAL
+// ══════════════════════════════════════════════════════
+const COLORS = [
+  { name: 'ROJO',     hex: '#ff3b30' },
+  { name: 'AZUL',     hex: '#007aff' },
+  { name: 'VERDE',    hex: '#34c759' },
+  { name: 'AMARILLO', hex: '#ffd60a' }
+];
+
+const NBACK_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+let ws = null;
+let wsConnected = false;
+let currentBpm = 0;
+let currentTemp = 0;
+let currentFinger = false;
+
+let sessionData = [];
+let currentPhase = 'listo';
+let phaseIndex = 0;
+const phases = ['reposo', 'estres', 'recuperacion'];
+
+let phaseTimer = null;
+let phaseSeconds = 0;
+let phaseDuration = 0;
+
+let selectedTest = 'stroop';
+let testCorrect = 0;
+let testWrong = 0;
+
+let testTimer = null;
+let testSeconds = 0;
+let wordTimer = null;
+
+// Variables específicas por prueba
+let currentStroopAnswer = '';
+let nbackHistory = [];
+let currentNbackAnswer = 'no';
+let currentPasatAnswer = 0;
+
+let config = {};
+let sessionStart = 0;
+
+// Estabilización
+let stabBpmHistory = [];
+let stabTempHistory = [];
+let stabBpmStable = false;
+let stabTempStable = false;
+const STAB_SAMPLES = 8;       // 8 muestras = ~8 segundos
+const STAB_BPM_TOLERANCE = 5;  // ±5 BPM
+const STAB_TEMP_TOLERANCE = 0.3; // ±0.3°C
+
+// ══════════════════════════════════════════════════════
+//   CHARTS
+// ══════════════════════════════════════════════════════
+const MAX_LIVE = 60;
+const liveBpmData = Array(MAX_LIVE).fill(null);
+const liveTempData = Array(MAX_LIVE).fill(null);
+
+const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+const tickColor = '#8e8e93';
+const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+
+const liveBpmChart = new Chart(document.getElementById('liveBpmChart'), {
+  type: 'line',
+  data: {
+    labels: Array(MAX_LIVE).fill(''),
+    datasets: [{
+      data: liveBpmData,
+      borderColor: '#ff3b30',
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.4,
+      fill: true,
+      backgroundColor: 'rgba(255,59,48,0.1)',
+      spanGaps: false
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { display: false },
+      y: { min: 40, max: 180, ticks: { font: { size: 10 }, color: tickColor, stepSize: 35 }, grid: { color: gridColor } }
+    }
+  }
+});
+
+const liveTempChart = new Chart(document.getElementById('liveTempChart'), {
+  type: 'line',
+  data: {
+    labels: Array(MAX_LIVE).fill(''),
+    datasets: [{
+      data: liveTempData,
+      borderColor: '#007aff',
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.4,
+      fill: true,
+      backgroundColor: 'rgba(0,122,255,0.1)',
+      spanGaps: false
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { display: false },
+      y: { min: 28, max: 38, ticks: { font: { size: 10 }, color: tickColor, stepSize: 2 }, grid: { color: gridColor } }
+    }
+  }
+});
+
+// ══════════════════════════════════════════════════════
+//   NAVEGACION
+// ══════════════════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════
+//   WEBSOCKET
+// ══════════════════════════════════════════════════════
+function setConfigStatus(state, msg) {
+  const dot = document.getElementById('configDot');
+  const txt = document.getElementById('configStatus');
+  dot.className = 'dot ' + state;
+  txt.textContent = msg;
+  wsConnected = state === 'connected';
+  document.getElementById('btnStart').disabled = !wsConnected;
+}
+
+function connectWS(ip) {
+  if (ws) { ws.close(); ws = null; }
+  setConfigStatus('connecting', 'Conectando a ' + ip + '...');
+
+  try {
+    ws = new WebSocket('ws://' + ip + ':81');
+
+    ws.onopen = () => setConfigStatus('connected', 'Conectado · ' + ip);
+
+    ws.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        currentBpm = d.bpm || 0;
+        currentTemp = parseFloat(d.temp) || 0;
+        currentFinger = d.finger;
+
+        // Actualizar UI según pantalla activa (con try interno para no romper WS)
+        try { updateUIs(); } catch(uiErr) { console.error('UI error:', uiErr); }
+
+        // Grabar datos si estamos en una fase
+        if (currentPhase !== 'listo' && currentPhase !== 'fin' && currentFinger && currentBpm > 0) {
+          sessionData.push({
+            timestamp: new Date().toISOString(),
+            elapsed: ((Date.now() - sessionStart) / 1000).toFixed(1),
+            fase: currentPhase,
+            bpm: currentBpm,
+            temperatura: currentTemp.toFixed(2),
+            test_correcto: ''
+          });
+          const rc = document.getElementById('recordCount');
+          if (rc) rc.textContent = sessionData.length + ' registros grabados';
+        }
+      } catch(err) { console.error('Parse error:', err); }
+    };
+
+    ws.onerror = () => setConfigStatus('error', 'Error al conectar');
+    ws.onclose = () => { if (wsConnected) setConfigStatus('error', 'Desconectado'); };
+  } catch(err) {
+    setConfigStatus('error', 'IP inválida');
+  }
+}
+
+function updateUIs() {
+  // Pantalla de sesión
+  const fw = document.getElementById('fingerWarn');
+  if (fw) fw.style.display = currentFinger ? 'none' : 'block';
+  const bv = document.getElementById('bpmVal');
+  const tv = document.getElementById('tempVal');
+  if (bv) bv.textContent = (currentFinger && currentBpm > 0) ? currentBpm : '--';
+  if (tv) tv.textContent = currentTemp > 0 ? currentTemp.toFixed(1) : '--';
+
+  // Charts en vivo
+  if (document.getElementById('screen-session').classList.contains('active')) {
+    liveBpmData.shift();
+    liveBpmData.push((currentFinger && currentBpm > 0) ? currentBpm : null);
+    liveBpmChart.update('none');
+
+    liveTempData.shift();
+    liveTempData.push(currentTemp > 0 ? currentTemp : null);
+    liveTempChart.update('none');
+  }
+
+  // Pantalla de estabilización
+  if (document.getElementById('screen-stabilize').classList.contains('active')) {
+    updateStabilization();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//   ESTABILIZACION
+// ══════════════════════════════════════════════════════
+function updateStabilization() {
+  const bpmCard = document.getElementById('stabCardBpm');
+  const tempCard = document.getElementById('stabCardTemp');
+
+  // ── BPM ──
+  if (currentFinger && currentBpm > 0) {
+    stabBpmHistory.push(currentBpm);
+    if (stabBpmHistory.length > STAB_SAMPLES) stabBpmHistory.shift();
+
+    document.getElementById('stabBpmVal').textContent = currentBpm + ' BPM';
+
+    if (stabBpmHistory.length >= STAB_SAMPLES) {
+      const min = Math.min(...stabBpmHistory);
+      const max = Math.max(...stabBpmHistory);
+      const range = max - min;
+      const stable = range <= STAB_BPM_TOLERANCE;
+
+      const pct = Math.min(100, ((STAB_BPM_TOLERANCE * 2 - range) / (STAB_BPM_TOLERANCE * 2)) * 100);
+      document.getElementById('stabBpmProgress').style.width = Math.max(0, pct) + '%';
+
+      if (stable && !stabBpmStable) {
+        stabBpmStable = true;
+        bpmCard.classList.add('stable');
+        document.getElementById('stabIconBpm').textContent = '✓';
+        document.getElementById('stabBpmStatus').textContent = 'Estable';
+        vibrate(100);
+        soundStable();
+      } else if (!stable) {
+        document.getElementById('stabBpmStatus').textContent = 'Estabilizando... (±' + range + ' BPM)';
+      }
+    } else {
+      document.getElementById('stabBpmStatus').textContent = 'Recopilando datos... ' + stabBpmHistory.length + '/' + STAB_SAMPLES;
+      const pct = (stabBpmHistory.length / STAB_SAMPLES) * 50;
+      document.getElementById('stabBpmProgress').style.width = pct + '%';
+    }
+  } else {
+    document.getElementById('stabBpmVal').textContent = '--';
+    document.getElementById('stabBpmStatus').textContent = 'Coloca el dedo en el sensor';
+    document.getElementById('stabBpmProgress').style.width = '0%';
+    stabBpmHistory = [];
+    stabBpmStable = false;
+    bpmCard.classList.remove('stable');
+    document.getElementById('stabIconBpm').textContent = '❤️';
+  }
+
+  // ── Temperatura ──
+  if (currentTemp > 0) {
+    stabTempHistory.push(currentTemp);
+    if (stabTempHistory.length > STAB_SAMPLES) stabTempHistory.shift();
+
+    document.getElementById('stabTempVal').textContent = currentTemp.toFixed(1) + ' °C';
+
+    if (stabTempHistory.length >= STAB_SAMPLES) {
+      const min = Math.min(...stabTempHistory);
+      const max = Math.max(...stabTempHistory);
+      const range = max - min;
+      const stable = range <= STAB_TEMP_TOLERANCE;
+
+      const pct = Math.min(100, ((STAB_TEMP_TOLERANCE * 2 - range) / (STAB_TEMP_TOLERANCE * 2)) * 100);
+      document.getElementById('stabTempProgress').style.width = Math.max(0, pct) + '%';
+
+      if (stable && !stabTempStable) {
+        stabTempStable = true;
+        tempCard.classList.add('stable');
+        document.getElementById('stabIconTemp').textContent = '✓';
+        document.getElementById('stabTempStatus').textContent = 'Estable';
+        vibrate(100);
+        soundStable();
+      } else if (!stable) {
+        document.getElementById('stabTempStatus').textContent = 'Estabilizando... (±' + range.toFixed(1) + ' °C)';
+      }
+    } else {
+      document.getElementById('stabTempStatus').textContent = 'Recopilando datos... ' + stabTempHistory.length + '/' + STAB_SAMPLES;
+      const pct = (stabTempHistory.length / STAB_SAMPLES) * 50;
+      document.getElementById('stabTempProgress').style.width = pct + '%';
+    }
+  }
+
+  // ── Si ambos estables, activar botón ──
+  if (stabBpmStable && stabTempStable) {
+    const btn = document.getElementById('btnStartSession');
+    if (btn.disabled) {
+      btn.disabled = false;
+      btn.textContent = '▶ Iniciar sesión';
+      document.getElementById('stabBigCheck').classList.add('show');
+      vibrate([100, 80, 200]);
+      soundStart();
+    }
+  }
+}
+
+function vibrate(pattern) {
+  if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+// ══════════════════════════════════════════════════════
+//   EVENTOS DE CONFIGURACION
+// ══════════════════════════════════════════════════════
+document.getElementById('btnConnect').addEventListener('click', () => {
+  initAudio();
+  const ip = document.getElementById('espIp').value.trim();
+  if (ip) connectWS(ip);
+});
+
+document.querySelectorAll('.test-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.test-option').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+    selectedTest = opt.dataset.test;
+  });
+});
+
+document.getElementById('btnStart').addEventListener('click', () => {
+  const pid = document.getElementById('patientId').value.trim() || 'Paciente';
+  config = {
+    patientId: pid,
+    test: selectedTest,
+    durations: {
+      reposo: parseInt(document.getElementById('dur-reposo').value) || 120,
+      estres: parseInt(document.getElementById('dur-estres').value) || 180,
+      recuperacion: parseInt(document.getElementById('dur-recuperacion').value) || 120
+    }
+  };
+
+  // Reset estabilización
+  stabBpmHistory = [];
+  stabTempHistory = [];
+  stabBpmStable = false;
+  stabTempStable = false;
+  document.getElementById('stabCardBpm').classList.remove('stable');
+  document.getElementById('stabCardTemp').classList.remove('stable');
+  document.getElementById('stabIconBpm').textContent = '❤️';
+  document.getElementById('stabIconTemp').textContent = '🌡️';
+  document.getElementById('stabBigCheck').classList.remove('show');
+  document.getElementById('btnStartSession').disabled = true;
+  document.getElementById('btnStartSession').textContent = 'Esperando estabilización...';
+
+  showScreen('stabilize');
+});
+
+document.getElementById('btnBackConfig').addEventListener('click', () => showScreen('config'));
+
+document.getElementById('btnStartSession').addEventListener('click', () => {
+  sessionData = [];
+  phaseIndex = 0;
+  currentPhase = 'listo';
+  testCorrect = 0;
+  testWrong = 0;
+  sessionStart = Date.now();
+  nbackHistory = [];
+
+  document.getElementById('sessionPatient').textContent = config.patientId;
+  showScreen('session');
+  updatePhaseUI();
+});
+
+// ══════════════════════════════════════════════════════
+//   FASES
+// ══════════════════════════════════════════════════════
+function updatePhaseUI() {
+  const badge = document.getElementById('phaseBadge');
+  const btn = document.getElementById('btnNextPhase');
+  badge.className = 'phase-badge ' + currentPhase;
+
+  const labels = { listo: 'Listo', reposo: 'Reposo', estres: 'Estrés', recuperacion: 'Recuperación' };
+  badge.textContent = labels[currentPhase] || currentPhase;
+
+  const testName = { stroop: 'Stroop', nback: 'N-Back', pasat: 'PASAT' }[config.test];
+  const nextLabels = ['▶ Iniciar reposo', '▶ Iniciar ' + testName, '▶ Iniciar recuperación', '✓ Ver resultados'];
+  btn.textContent = nextLabels[phaseIndex] || '✓ Ver resultados';
+
+  document.getElementById('timerFill').style.width = '0%';
+}
+
+document.getElementById('btnNextPhase').addEventListener('click', () => {
+  if (phaseIndex < 3) {
+    startPhase(phases[phaseIndex]);
+  } else {
+    showResults();
+  }
+});
+
+document.getElementById('btnEndSession').addEventListener('click', () => {
+  if (confirm('¿Terminar sesión y ver resultados?')) {
+    clearInterval(phaseTimer);
+    clearInterval(testTimer);
+    clearTimeout(wordTimer);
+    closeAllOverlays();
+    showResults();
+  }
+});
+
+function startPhase(phase) {
+  currentPhase = phase;
+  phaseDuration = config.durations[phase];
+  phaseSeconds = 0;
+  document.getElementById('btnNextPhase').disabled = true;
+  updatePhaseUI();
+
+  clearInterval(phaseTimer);
+  phaseTimer = setInterval(() => {
+    phaseSeconds++;
+    const pct = (phaseSeconds / phaseDuration) * 100;
+    document.getElementById('timerFill').style.width = Math.min(pct, 100) + '%';
+    if (phaseSeconds >= phaseDuration) {
+      clearInterval(phaseTimer);
+      phaseIndex++;
+      if (phase === 'estres') endTest();
+      currentPhase = phaseIndex < 3 ? 'listo' : 'fin';
+      document.getElementById('btnNextPhase').disabled = false;
+      vibrate(200);
+      soundPhaseEnd();
+
+      if (phaseIndex >= 3) {
+        document.getElementById('btnNextPhase').textContent = '✓ Ver resultados';
+      } else {
+        updatePhaseUI();
+      }
+    }
+  }, 1000);
+
+  if (phase === 'estres') {
+    startTest(phaseDuration);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//   PRUEBAS COGNITIVAS (router)
+// ══════════════════════════════════════════════════════
+function startTest(duration) {
+  testSeconds = duration;
+  testCorrect = 0;
+  testWrong = 0;
+  testStreak = 0;
+  nbackHistory = [];
+
+  // Reset pressure bars
+  ['stroop', 'nback', 'pasat'].forEach(t => {
+    const fill = document.getElementById(t + 'PressureFill');
+    const label = document.getElementById(t + 'PressureLabel');
+    if (fill) fill.style.width = '0%';
+    if (label) label.textContent = '0% / 70% requerido';
+    const streak = document.getElementById(t + 'Streak');
+    if (streak) streak.textContent = '';
+  });
+
+  // Cuenta regresiva antes de empezar
+  initAudio();
+  showCountdown('Prueba comenzando', () => {
+    if (config.test === 'stroop') startStroop(duration);
+    else if (config.test === 'nback') startNback(duration);
+    else if (config.test === 'pasat') startPasat(duration);
+
+    clearInterval(testTimer);
+    testTimer = setInterval(() => {
+      testSeconds--;
+      const m = Math.floor(testSeconds / 60);
+      const s = testSeconds % 60;
+      const tm = m + ':' + String(s).padStart(2, '0');
+      ['stroopBigTimer', 'nbackBigTimer', 'pasatBigTimer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.textContent = tm;
+          el.classList.remove('warning', 'danger');
+          if (testSeconds <= 10) el.classList.add('danger');
+          else if (testSeconds <= 30) el.classList.add('warning');
+        }
+      });
+      const pct = ((testSeconds / duration) * 100) + '%';
+      ['stroopProgressFill', 'nbackProgressFill', 'pasatProgressFill'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.width = pct;
+      });
+      // Sonido último 5 segundos
+      if (testSeconds <= 5 && testSeconds > 0) {
+        soundCountdown();
+        vibrate(40);
+      }
+      if (testSeconds <= 0) {
+        clearInterval(testTimer);
+      }
+    }, 1000);
+  });
+}
+
+function endTest() {
+  clearTimeout(wordTimer);
+  clearInterval(testTimer);
+  closeAllOverlays();
+}
+
+function closeAllOverlays() {
+  document.querySelectorAll('.test-overlay').forEach(o => o.classList.remove('active'));
+}
+
+function recordTestAnswer(correct) {
+  sessionData.push({
+    timestamp: new Date().toISOString(),
+    elapsed: ((Date.now() - sessionStart) / 1000).toFixed(1),
+    fase: 'estres',
+    bpm: currentBpm,
+    temperatura: currentTemp.toFixed(2),
+    test_correcto: correct ? '1' : '0'
+  });
+  document.getElementById('recordCount').textContent = sessionData.length + ' registros grabados';
+
+  // ── Efectos sensoriales ──
+  if (correct) {
+    soundCorrect();
+    flashScreen('correct');
+    vibrate(40);
+    testStreak++;
+    if (testStreak === 5) showMotivational('praise');
+    if (testStreak === 10) showMotivational('praise');
+  } else {
+    soundWrong();
+    flashScreen('wrong');
+    vibrate([60, 30, 100]);
+    testStreak = 0;
+    // 30% chance de mostrar mensaje motivacional al fallar
+    if (Math.random() < 0.3) showMotivational('encouragement');
+  }
+
+  updatePressureBars();
+  updateStreaks();
+}
+
+function updatePressureBars() {
+  const total = testCorrect + testWrong;
+  if (total === 0) return;
+  const pct = (testCorrect / total) * 100;
+  const target = 70;
+  const fillPct = Math.min(100, pct);
+
+  ['stroop', 'nback', 'pasat'].forEach(t => {
+    const fill = document.getElementById(t + 'PressureFill');
+    const label = document.getElementById(t + 'PressureLabel');
+    if (fill) fill.style.width = fillPct + '%';
+    if (label) label.textContent = Math.round(pct) + '% / ' + target + '% requerido';
+  });
+
+  // Si está por debajo del 50%, mostrar warning
+  if (total >= 5 && pct < 50 && Math.random() < 0.2) {
+    showMotivational('warning');
+  }
+}
+
+function updateStreaks() {
+  const txt = testStreak >= 3 ? '🔥 ' + testStreak + ' seguidas' : '';
+  ['stroop', 'nback', 'pasat'].forEach(t => {
+    const el = document.getElementById(t + 'Streak');
+    if (el) el.textContent = txt;
+  });
+}
+
+// Variable global de racha
+let testStreak = 0;
+
+// ══════════════════════════════════════════════════════
+//   STROOP TEST
+// ══════════════════════════════════════════════════════
+function startStroop(duration) {
+  document.getElementById('stroop-overlay').classList.add('active');
+  showNextStroopWord();
+}
+
+function showNextStroopWord() {
+  clearTimeout(wordTimer);
+  const wordColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+  let displayColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+  while (displayColor.name === wordColor.name) {
+    displayColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+  }
+
+  currentStroopAnswer = displayColor.name;
+
+  const wordEl = document.getElementById('stroop-word');
+  wordEl.textContent = wordColor.name;
+  wordEl.style.color = displayColor.hex;
+
+  const btns = document.getElementById('stroopButtons');
+  btns.innerHTML = '';
+  btns.className = 'test-buttons';
+
+  const shuffled = [...COLORS].sort(() => Math.random() - 0.5);
+  shuffled.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'test-btn';
+    b.textContent = c.name;
+    b.style.background = c.hex;
+    if (c.name === 'AMARILLO') b.style.color = '#1c1c1e';
+    b.addEventListener('click', () => handleStroopAnswer(c.name));
+    btns.appendChild(b);
+  });
+
+  document.getElementById('stroopFeedback').textContent = '';
+  wordTimer = setTimeout(() => {
+    // Si no responde a tiempo es error
+    if (testSeconds > 0) {
+      testWrong++;
+      document.getElementById('stroopScore').textContent = 'Aciertos: ' + testCorrect + ' | Errores: ' + testWrong;
+      recordTestAnswer(false);
+      showNextStroopWord();
+    }
+  }, 1800);
+}
+
+function handleStroopAnswer(answer) {
+  clearTimeout(wordTimer);
+  const correct = answer === currentStroopAnswer;
+  if (correct) {
+    testCorrect++;
+    document.getElementById('stroopFeedback').textContent = '✓';
+    document.getElementById('stroopFeedback').style.color = '#34c759';
+  } else {
+    testWrong++;
+    document.getElementById('stroopFeedback').textContent = '✗';
+    document.getElementById('stroopFeedback').style.color = '#ff3b30';
+  }
+  recordTestAnswer(correct);
+  document.getElementById('stroopScore').textContent = 'Aciertos: ' + testCorrect + ' | Errores: ' + testWrong;
+  if (testSeconds > 0) setTimeout(() => showNextStroopWord(), 300);
+}
+
+// ══════════════════════════════════════════════════════
+//   N-BACK TEST
+// ══════════════════════════════════════════════════════
+function startNback(duration) {
+  document.getElementById('nback-overlay').classList.add('active');
+  showNextNbackLetter();
+
+  document.querySelectorAll('#nbackButtons .nback-btn').forEach(b => {
+    const newB = b.cloneNode(true);
+    b.parentNode.replaceChild(newB, b);
+  });
+  document.querySelectorAll('#nbackButtons .nback-btn').forEach(b => {
+    b.addEventListener('click', () => handleNbackAnswer(b.dataset.ans));
+  });
+}
+
+function showNextNbackLetter() {
+  clearTimeout(wordTimer);
+  let next;
+  // 40% chance de repetir la letra anterior si hay anterior
+  if (nbackHistory.length > 0 && Math.random() < 0.4) {
+    next = nbackHistory[nbackHistory.length - 1];
+  } else {
+    next = NBACK_LETTERS[Math.floor(Math.random() * NBACK_LETTERS.length)];
+  }
+
+  currentNbackAnswer = (nbackHistory.length > 0 && next === nbackHistory[nbackHistory.length - 1]) ? 'yes' : 'no';
+  nbackHistory.push(next);
+  document.getElementById('nback-letter').textContent = next;
+  document.getElementById('nbackFeedback').textContent = '';
+
+  wordTimer = setTimeout(() => {
+    // Si no responde a tiempo, se cuenta como error
+    if (testSeconds > 0 && nbackHistory.length > 1) {
+      testWrong++;
+      document.getElementById('nbackScore').textContent = 'Aciertos: ' + testCorrect + ' | Errores: ' + testWrong;
+      recordTestAnswer(false);
+    }
+    if (testSeconds > 0) showNextNbackLetter();
+  }, 2000);
+}
+
+function handleNbackAnswer(answer) {
+  if (nbackHistory.length < 2) {
+    // Primera letra, no se evalúa
+    clearTimeout(wordTimer);
+    showNextNbackLetter();
+    return;
+  }
+  clearTimeout(wordTimer);
+  const correct = answer === currentNbackAnswer;
+  if (correct) {
+    testCorrect++;
+    document.getElementById('nbackFeedback').textContent = '✓';
+    document.getElementById('nbackFeedback').style.color = '#34c759';
+  } else {
+    testWrong++;
+    document.getElementById('nbackFeedback').textContent = '✗';
+    document.getElementById('nbackFeedback').style.color = '#ff3b30';
+  }
+  recordTestAnswer(correct);
+  document.getElementById('nbackScore').textContent = 'Aciertos: ' + testCorrect + ' | Errores: ' + testWrong;
+  if (testSeconds > 0) setTimeout(() => showNextNbackLetter(), 300);
+}
+
+// ══════════════════════════════════════════════════════
+//   PASAT (Aritmética mental)
+// ══════════════════════════════════════════════════════
+function startPasat(duration) {
+  document.getElementById('pasat-overlay').classList.add('active');
+  showNextPasatQuestion();
+}
+
+function showNextPasatQuestion() {
+  clearTimeout(wordTimer);
+  const ops = ['+', '-'];
+  const op = ops[Math.floor(Math.random() * ops.length)];
+  let a, b, result;
+  if (op === '+') {
+    a = Math.floor(Math.random() * 80) + 15;  // 15-94
+    b = Math.floor(Math.random() * 40) + 10;  // 10-49
+    result = a + b;
+  } else {
+    a = Math.floor(Math.random() * 70) + 30;  // 30-99
+    b = Math.floor(Math.random() * 25) + 5;   // 5-29
+    result = a - b;
+  }
+
+  currentPasatAnswer = result;
+  document.getElementById('pasat-question').textContent = a + ' ' + op + ' ' + b;
+
+  // Generar 4 opciones, una correcta y 3 distractoras
+  const options = [result];
+  while (options.length < 4) {
+    const delta = (Math.floor(Math.random() * 11) - 5);
+    const fake = result + (delta === 0 ? 1 : delta);
+    if (!options.includes(fake) && fake > 0) options.push(fake);
+  }
+  options.sort(() => Math.random() - 0.5);
+
+  const btns = document.getElementById('pasatButtons');
+  btns.innerHTML = '';
+  options.forEach(opt => {
+    const b = document.createElement('button');
+    b.className = 'test-btn pasat-btn';
+    b.textContent = opt;
+    b.addEventListener('click', () => handlePasatAnswer(opt));
+    btns.appendChild(b);
+  });
+
+  document.getElementById('pasatFeedback').textContent = '';
+  wordTimer = setTimeout(() => {
+    if (testSeconds > 0) {
+      testWrong++;
+      document.getElementById('pasatScore').textContent = 'Aciertos: ' + testCorrect + ' | Errores: ' + testWrong;
+      recordTestAnswer(false);
+      showNextPasatQuestion();
+    }
+  }, 3500);
+}
+
+function handlePasatAnswer(answer) {
+  clearTimeout(wordTimer);
+  const correct = answer === currentPasatAnswer;
+  if (correct) {
+    testCorrect++;
+    document.getElementById('pasatFeedback').textContent = '✓';
+    document.getElementById('pasatFeedback').style.color = '#34c759';
+  } else {
+    testWrong++;
+    document.getElementById('pasatFeedback').textContent = '✗';
+    document.getElementById('pasatFeedback').style.color = '#ff3b30';
+  }
+  recordTestAnswer(correct);
+  document.getElementById('pasatScore').textContent = 'Aciertos: ' + testCorrect + ' | Errores: ' + testWrong;
+  if (testSeconds > 0) setTimeout(() => showNextPasatQuestion(), 350);
+}
+
+// ══════════════════════════════════════════════════════
+//   RESULTADOS
+// ══════════════════════════════════════════════════════
+function pearson(xs, ys) {
+  const n = xs.length;
+  if (n < 2) return 0;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0, dx = 0, dy = 0;
+  for (let i = 0; i < n; i++) {
+    const a = xs[i] - mx, b = ys[i] - my;
+    num += a * b; dx += a * a; dy += b * b;
+  }
+  return dx && dy ? num / Math.sqrt(dx * dy) : 0;
+}
+
+function avg(arr) {
+  if (!arr.length) return null;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function showResults() {
+  clearInterval(phaseTimer);
+  if (ws) ws.close();
+
+  const testName = { stroop: 'Stroop Test', nback: 'N-Back', pasat: 'PASAT' }[config.test];
+  document.getElementById('resultsPatient').textContent = config.patientId + ' · ' + testName + ' · ' + new Date().toLocaleDateString('es-MX');
+  document.getElementById('testResultLabel').textContent = 'Resultados de ' + testName;
+
+  const byPhase = { reposo: [], estres: [], recuperacion: [] };
+  sessionData.forEach(r => { if (byPhase[r.fase]) byPhase[r.fase].push(r); });
+
+  const bpmByPhase = {}, tempByPhase = {};
+  ['reposo', 'estres', 'recuperacion'].forEach(p => {
+    bpmByPhase[p] = avg(byPhase[p].map(r => parseFloat(r.bpm)).filter(v => v > 0));
+    tempByPhase[p] = avg(byPhase[p].map(r => parseFloat(r.temperatura)).filter(v => v > 0));
+  });
+
+  document.getElementById('bpmReposo').textContent = bpmByPhase.reposo ? Math.round(bpmByPhase.reposo) : '--';
+  document.getElementById('bpmEstres').textContent = bpmByPhase.estres ? Math.round(bpmByPhase.estres) : '--';
+  document.getElementById('bpmRecup').textContent = bpmByPhase.recuperacion ? Math.round(bpmByPhase.recuperacion) : '--';
+  document.getElementById('tempReposo').textContent = tempByPhase.reposo ? tempByPhase.reposo.toFixed(1) : '--';
+  document.getElementById('tempEstres').textContent = tempByPhase.estres ? tempByPhase.estres.toFixed(1) : '--';
+  document.getElementById('tempRecup').textContent = tempByPhase.recuperacion ? tempByPhase.recuperacion.toFixed(1) : '--';
+
+  const pairs = sessionData
+    .filter(r => ['reposo', 'estres', 'recuperacion'].includes(r.fase))
+    .map(r => [parseFloat(r.bpm), parseFloat(r.temperatura)])
+    .filter(([b, t]) => b > 0 && t > 0);
+  const r = pearson(pairs.map(p => p[0]), pairs.map(p => p[1]));
+
+  document.getElementById('corrValue').textContent = rRound;
+  let desc = '';
+  const absR = Math.abs(rRound);
+  if (absR >= 0.7) desc = rRound > 0 ? 'Correlación positiva fuerte.' : 'Correlación negativa fuerte (respuesta simpática típica al estrés).';
+  else if (absR >= 0.4) desc = rRound > 0 ? 'Correlación positiva moderada.' : 'Correlación negativa moderada.';
+  else desc = 'Correlación débil o no significativa.';
+  document.getElementById('corrDesc').textContent = desc;
+  document.getElementById('corrValue').style.color = rRound < 0 ? '#007aff' : '#ff3b30';
+
+  const total = testCorrect + testWrong;
+  document.getElementById('resCorrect').textContent = testCorrect;
+  document.getElementById('resWrong').textContent = testWrong;
+  document.getElementById('resPct').textContent = total > 0 ? Math.round((testCorrect / total) * 100) + '%' : '0%';
+
+  buildFullChart();
+  showScreen('results');
+}
+
+let fullChartInstance = null;
+function buildFullChart() {
+  if (fullChartInstance) fullChartInstance.destroy();
+
+  const labels = sessionData.map((_, i) => i);
+  const bpmSeries = sessionData.map(r => parseFloat(r.bpm) > 0 ? parseFloat(r.bpm) : null);
+  const tempSeries = sessionData.map(r => parseFloat(r.temperatura) > 0 ? parseFloat(r.temperatura) : null);
+
+  fullChartInstance = new Chart(document.getElementById('fullChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'BPM', data: bpmSeries, borderColor: '#ff3b30', borderWidth: 2, pointRadius: 0, tension: 0.4, yAxisID: 'y', spanGaps: false },
+        { label: 'Temp °C', data: tempSeries, borderColor: '#007aff', borderWidth: 2, pointRadius: 0, tension: 0.4, yAxisID: 'y2', borderDash: [4,3], spanGaps: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: true, labels: { font: { size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { display: false },
+        y: { position: 'left', min: 40, max: 180, ticks: { font: { size: 10 }, color: '#ff3b30' } },
+        y2: { position: 'right', min: 28, max: 40, ticks: { font: { size: 10 }, color: '#007aff' }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//   EXPORTAR CSV
+// ══════════════════════════════════════════════════════
+document.getElementById('btnExport').addEventListener('click', () => {
+  const testName = { stroop: 'Stroop', nback: 'N-Back', pasat: 'PASAT' }[config.test];
+  const headers = ['timestamp', 'elapsed_s', 'fase', 'bpm', 'temperatura', 'test_correcto'];
+  const rows = sessionData.map(r => [r.timestamp, r.elapsed, r.fase, r.bpm, r.temperatura, r.test_correcto]);
+  const meta = '# Paciente: ' + config.patientId + '\n# Prueba: ' + testName + '\n# Fecha: ' + new Date().toISOString() + '\n';
+  const csv = meta + [headers, ...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = config.patientId.replace(/\s+/g, '_') + '_' + testName + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('btnNewSession').addEventListener('click', () => {
+  location.reload();
+});
+</script>
+</body>
+</html>
